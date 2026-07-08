@@ -1,0 +1,7 @@
+build/
+.dart_tool/
+.packages
+*.lock
+.DS_Store
+*.pyc
+__pycache__/
