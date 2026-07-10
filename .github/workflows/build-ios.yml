@@ -45,11 +45,11 @@ jobs:
         run: pod install
 
       - name: Build iOS (unsigned)
-        if: ${{ !secrets.APPLE_CERTIFICATE_BASE64 }}
+        if: env.HAS_CERT != 'true'
         run: flutter build ios --no-codesign --release
 
       - name: Upload Runner.app (unsigned)
-        if: ${{ !secrets.APPLE_CERTIFICATE_BASE64 }}
+        if: env.HAS_CERT != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ios-unsigned
@@ -57,12 +57,12 @@ jobs:
           retention-days: 7
 
       - name: Setup code signing
-        if: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+        if: env.HAS_CERT == 'true'
         env:
           CERT_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           PROFILE_BASE64: ${{ secrets.APPLE_PROVISION_PROFILE_BASE64 }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD || 'temp-keychain-pwd' }}
+          KEYCHAIN_PASSWORD: temp-keychain-pwd
         run: |
           # Create temp keychain
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
@@ -87,30 +87,31 @@ jobs:
           echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_DIR/profile.mobileprovision"
 
       - name: Build signed IPA
-        if: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+        if: env.HAS_CERT == 'true'
         env:
           EXPORT_METHOD: ${{ github.event.inputs.export_method || 'ad-hoc' }}
         run: |
-          # Generate ExportOptions.plist
-          cat > ios/ExportOptions.plist << EOF
+          cat > ios/ExportOptions.plist << 'PLISTEOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>method</key>
-            <string>$EXPORT_METHOD</string>
+            <string>${EXPORT_METHOD}</string>
             <key>teamID</key>
             <string>${{ secrets.APPLE_TEAM_ID }}</string>
           </dict>
           </plist>
-          EOF
-
+          PLISTEOF
           flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
 
       - name: Upload signed IPA
-        if: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+        if: env.HAS_CERT == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ios-signed
           path: build/ios/ipa/*.ipa
           retention-days: 30
+
+    env:
+      HAS_CERT: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
