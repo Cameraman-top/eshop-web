@@ -39,6 +39,13 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Set development team
+        run: |
+          cd ios
+          /usr/libexec/PlistBuddy -c "Print :objects" Runner.xcodeproj/project.pbxproj > /dev/null 2>&1 || true
+          # Use sed to inject DEVELOPMENT_TEAM into all build configs
+          find . -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ${{ secrets.APPLE_TEAM_ID }};/g' {} \;
+
       - name: Install CocoaPods
         working-directory: ios
         run: pod install
@@ -67,7 +74,6 @@ jobs:
           python3 << 'PYEOF'
           import os, base64, subprocess
 
-          # Create keychain
           kc_pwd = os.environ['KEYCHAIN_PASSWORD']
           kc_path = os.path.join(os.environ['RUNNER_TEMP'], 'app-signing.keychain-db')
           subprocess.run(['security', 'create-keychain', '-p', kc_pwd, kc_path], check=True)
@@ -77,32 +83,22 @@ jobs:
 
           cert_pwd = os.environ['CERT_PASSWORD']
 
-          # Import development certificate
           dev_b64 = os.environ['DEV_CERT_BASE64']
           dev_path = os.path.join(os.environ['RUNNER_TEMP'], 'dev_certificate.p12')
-          with open(dev_path, 'wb') as f:
-              f.write(base64.b64decode(dev_b64))
-          print(f"Dev cert: {os.path.getsize(dev_path)} bytes")
+          with open(dev_path, 'wb') as f: f.write(base64.b64decode(dev_b64))
           subprocess.run(['security', 'import', dev_path, '-k', kc_path, '-P', cert_pwd, '-A', '-T', '/usr/bin/codesign'], check=True)
 
-          # Import distribution certificate
           dist_b64 = os.environ['DIST_CERT_BASE64']
           dist_path = os.path.join(os.environ['RUNNER_TEMP'], 'dist_certificate.p12')
-          with open(dist_path, 'wb') as f:
-              f.write(base64.b64decode(dist_b64))
-          print(f"Dist cert: {os.path.getsize(dist_path)} bytes")
+          with open(dist_path, 'wb') as f: f.write(base64.b64decode(dist_b64))
           subprocess.run(['security', 'import', dist_path, '-k', kc_path, '-P', cert_pwd, '-A', '-T', '/usr/bin/codesign'], check=True)
 
           subprocess.run(['security', 'set-key-partition-list', '-S', 'apple-tool:,apple:', '-s', '-k', kc_pwd, kc_path], check=True)
 
-          # Install provisioning profile
           prof_b64 = os.environ['PROFILE_BASE64']
           prof_dir = os.path.expanduser('~/Library/MobileDevice/Provisioning Profiles')
           os.makedirs(prof_dir, exist_ok=True)
-          prof_path = os.path.join(prof_dir, 'profile.mobileprovision')
-          with open(prof_path, 'wb') as f:
-              f.write(base64.b64decode(prof_b64))
-          print(f"Profile: {os.path.getsize(prof_path)} bytes")
+          with open(os.path.join(prof_dir, 'profile.mobileprovision'), 'wb') as f: f.write(base64.b64decode(prof_b64))
 
           print("Code signing ready!")
           PYEOF
