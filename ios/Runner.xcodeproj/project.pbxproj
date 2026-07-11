@@ -174,10 +174,12 @@
 				TargetAttributes = {
 					331C8080294A63A400263BE5 = {
 						CreatedOnToolsVersion = 14.0;
+				DevelopmentTeam = 42A66794AZ;
 						TestTargetID = 97C146ED1CF9000F007C117D;
 					};
 					97C146ED1CF9000F007C117D = {
 						CreatedOnToolsVersion = 7.3.1;
+				DevelopmentTeam = 42A66794AZ;
 						LastSwiftMigration = 1100;
 					};
 				};
