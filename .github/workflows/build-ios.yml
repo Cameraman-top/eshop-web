@@ -72,9 +72,8 @@ jobs:
           subprocess.run(['security', 'list-keychains', '-d', 'user', '-s', kc_path], check=True)
 
           cert_pwd = os.environ['CERT_PASSWORD']
-
           for b64_str, name in [(os.environ['DEV_CERT_BASE64'], 'dev'), (os.environ['DIST_CERT_BASE64'], 'dist')]:
-              p = os.path.join(os.environ['RUNNER_TEMP'], f'{name}_certificate.p12')
+              p = os.path.join(os.environ['RUNNER_TEMP'], f'{name}.p12')
               with open(p, 'wb') as f: f.write(base64.b64decode(b64_str))
               subprocess.run(['security', 'import', p, '-k', kc_path, '-P', cert_pwd, '-A', '-T', '/usr/bin/codesign'], check=True)
 
@@ -83,29 +82,72 @@ jobs:
           prof_b64 = os.environ['PROFILE_BASE64']
           prof_dir = os.path.expanduser('~/Library/MobileDevice/Provisioning Profiles')
           os.makedirs(prof_dir, exist_ok=True)
-          with open(os.path.join(prof_dir, 'profile.mobileprovision'), 'wb') as f: f.write(base64.b64decode(prof_b64))
+          prof_path = os.path.join(prof_dir, 'eshop.mobileprovision')
+          with open(prof_path, 'wb') as f: f.write(base64.b64decode(prof_b64))
+          
+          # Get profile UUID
+          import plistlib
+          prof_data = base64.b64decode(prof_b64)
+          # Profile starts with plist after CMS signature
+          idx = prof_data.find(b'<?xml')
+          if idx >= 0:
+              plist_data = prof_data[idx:]
+              pl = plistlib.loads(plist_data)
+              print(f"Profile UUID: {pl.get('UUID', 'unknown')}")
+              print(f"Profile name: {pl.get('Name', 'unknown')}")
           print("Code signing ready!")
           PYEOF
 
-      - name: Build signed IPA
+      - name: Build signed IPA with xcodebuild
         if: env.HAS_CERT == 'true'
         env:
-          EXPORT_METHOD: ${{ github.event.inputs.export_method || 'ad-hoc' }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          cat > ios/ExportOptions.plist << 'PLISTEOF'
+          cd ios
+          
+          # Get the provisioning profile UUID
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/eshop.mobileprovision 2>/dev/null) 2>/dev/null)
+          echo "Profile UUID: $PROFILE_UUID"
+
+          # Build with xcodebuild directly, specifying all signing params
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath ../build/ios/Runner.xcarchive \
+            DEVELOPMENT_TEAM=${TEAM_ID} \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            CODE_SIGN_IDENTITY="iPhone Distribution" \
+            archive
+
+          # Create ExportOptions.plist
+          cat > ExportOptions.plist << PLISTEOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>method</key>
-            <string>${EXPORT_METHOD}</string>
+            <string>${{ github.event.inputs.export_method || 'ad-hoc' }}</string>
             <key>teamID</key>
             <string>${TEAM_ID}</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.eshop.eshopFlutter</key>
+              <string>$PROFILE_UUID</string>
+            </dict>
+            <key>signingCertificate</key>
+            <string>iPhone Distribution</string>
           </dict>
           </plist>
           PLISTEOF
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+
+          xcodebuild -exportArchive \
+            -archivePath ../build/ios/Runner.xcarchive \
+            -exportPath ../build/ios/ipa \
+            -exportOptionsPlist ExportOptions.plist
+
+          echo "IPA built!"
 
       - name: Upload signed IPA
         if: env.HAS_CERT == 'true'
