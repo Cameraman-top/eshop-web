@@ -39,13 +39,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Set development team
-        run: |
-          cd ios
-          /usr/libexec/PlistBuddy -c "Print :objects" Runner.xcodeproj/project.pbxproj > /dev/null 2>&1 || true
-          # Use sed to inject DEVELOPMENT_TEAM into all build configs
-          find . -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ${{ secrets.APPLE_TEAM_ID }};/g' {} \;
-
       - name: Install CocoaPods
         working-directory: ios
         run: pod install
@@ -70,9 +63,10 @@ jobs:
           CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           PROFILE_BASE64: ${{ secrets.APPLE_PROVISION_PROFILE_BASE64 }}
           KEYCHAIN_PASSWORD: temp-keychain-pwd
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           python3 << 'PYEOF'
-          import os, base64, subprocess
+          import os, base64, subprocess, re
 
           kc_pwd = os.environ['KEYCHAIN_PASSWORD']
           kc_path = os.path.join(os.environ['RUNNER_TEMP'], 'app-signing.keychain-db')
@@ -100,6 +94,16 @@ jobs:
           os.makedirs(prof_dir, exist_ok=True)
           with open(os.path.join(prof_dir, 'profile.mobileprovision'), 'wb') as f: f.write(base64.b64decode(prof_b64))
 
+          # Inject DEVELOPMENT_TEAM into Xcode project AFTER pod install
+          team_id = os.environ['TEAM_ID']
+          pbxproj = 'ios/Runner.xcodeproj/project.pbxproj'
+          with open(pbxproj, 'r') as f:
+              content = f.read()
+          content = re.sub(r'CODE_SIGN_STYLE = Automatic;', f'CODE_SIGN_STYLE = Automatic;\n\t\t\t\tDEVELOPMENT_TEAM = {team_id};', content)
+          with open(pbxproj, 'w') as f:
+              f.write(content)
+          print(f"Injected DEVELOPMENT_TEAM = {team_id}")
+
           print("Code signing ready!")
           PYEOF
 
@@ -107,6 +111,7 @@ jobs:
         if: env.HAS_CERT == 'true'
         env:
           EXPORT_METHOD: ${{ github.event.inputs.export_method || 'ad-hoc' }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           cat > ios/ExportOptions.plist << 'PLISTEOF'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -116,7 +121,7 @@ jobs:
             <key>method</key>
             <string>${EXPORT_METHOD}</string>
             <key>teamID</key>
-            <string>${{ secrets.APPLE_TEAM_ID }}</string>
+            <string>${TEAM_ID}</string>
           </dict>
           </plist>
           PLISTEOF
