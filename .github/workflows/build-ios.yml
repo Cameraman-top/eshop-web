@@ -34,8 +34,7 @@ jobs:
           cache: true
 
       - name: Setup CocoaPods
-        run: |
-          pod --version || sudo gem install cocoapods
+        run: pod --version || sudo gem install cocoapods
 
       - name: Install dependencies
         run: flutter pub get
@@ -64,27 +63,42 @@ jobs:
           PROFILE_BASE64: ${{ secrets.APPLE_PROVISION_PROFILE_BASE64 }}
           KEYCHAIN_PASSWORD: temp-keychain-pwd
         run: |
-          # Create temp keychain
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychains -d user -s $KEYCHAIN_PATH
+          python3 << 'PYEOF'
+          import os, base64, subprocess, tempfile
+
+          # Decode certificate
+          cert_b64 = os.environ['CERT_BASE64']
+          cert_data = base64.b64decode(cert_b64)
+          cert_path = os.path.join(os.environ['RUNNER_TEMP'], 'certificate.p12')
+          with open(cert_path, 'wb') as f:
+              f.write(cert_data)
+          print(f"Certificate written: {len(cert_data)} bytes")
+
+          # Decode provisioning profile
+          prof_b64 = os.environ['PROFILE_BASE64']
+          prof_data = base64.b64decode(prof_b64)
+          prof_dir = os.path.expanduser('~/Library/MobileDevice/Provisioning Profiles')
+          os.makedirs(prof_dir, exist_ok=True)
+          prof_path = os.path.join(prof_dir, 'profile.mobileprovision')
+          with open(prof_path, 'wb') as f:
+              f.write(prof_data)
+          print(f"Profile written: {len(prof_data)} bytes")
+
+          # Create keychain
+          kc_pwd = os.environ['KEYCHAIN_PASSWORD']
+          kc_path = os.path.join(os.environ['RUNNER_TEMP'], 'app-signing.keychain-db')
+          subprocess.run(['security', 'create-keychain', '-p', kc_pwd, kc_path], check=True)
+          subprocess.run(['security', 'set-keychain-settings', '-lut', '21600', kc_path], check=True)
+          subprocess.run(['security', 'unlock-keychain', '-p', kc_pwd, kc_path], check=True)
+          subprocess.run(['security', 'list-keychains', '-d', 'user', '-s', kc_path], check=True)
 
           # Import certificate
-          echo "$CERT_BASE64" | base64 --decode > $RUNNER_TEMP/certificate.p12
-          security import $RUNNER_TEMP/certificate.p12 \
-            -k $KEYCHAIN_PATH \
-            -P "$CERT_PASSWORD" \
-            -A -T /usr/bin/codesign
+          cert_pwd = os.environ['CERT_PASSWORD']
+          subprocess.run(['security', 'import', cert_path, '-k', kc_path, '-P', cert_pwd, '-A', '-T', '/usr/bin/codesign'], check=True)
+          subprocess.run(['security', 'set-key-partition-list', '-S', 'apple-tool:,apple:', '-s', '-k', kc_pwd, kc_path], check=True)
 
-          security set-key-partition-list -S apple-tool:,apple: \
-            -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          # Install provisioning profile
-          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "$PROFILE_DIR"
-          echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_DIR/profile.mobileprovision"
+          print("Code signing ready!")
+          PYEOF
 
       - name: Build signed IPA
         if: env.HAS_CERT == 'true'
