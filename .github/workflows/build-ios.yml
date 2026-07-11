@@ -58,31 +58,14 @@ jobs:
       - name: Setup code signing
         if: env.HAS_CERT == 'true'
         env:
-          CERT_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          DEV_CERT_BASE64: ${{ secrets.APPLE_DEV_CERTIFICATE_BASE64 }}
+          DIST_CERT_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           PROFILE_BASE64: ${{ secrets.APPLE_PROVISION_PROFILE_BASE64 }}
           KEYCHAIN_PASSWORD: temp-keychain-pwd
         run: |
           python3 << 'PYEOF'
-          import os, base64, subprocess, tempfile
-
-          # Decode certificate
-          cert_b64 = os.environ['CERT_BASE64']
-          cert_data = base64.b64decode(cert_b64)
-          cert_path = os.path.join(os.environ['RUNNER_TEMP'], 'certificate.p12')
-          with open(cert_path, 'wb') as f:
-              f.write(cert_data)
-          print(f"Certificate written: {len(cert_data)} bytes")
-
-          # Decode provisioning profile
-          prof_b64 = os.environ['PROFILE_BASE64']
-          prof_data = base64.b64decode(prof_b64)
-          prof_dir = os.path.expanduser('~/Library/MobileDevice/Provisioning Profiles')
-          os.makedirs(prof_dir, exist_ok=True)
-          prof_path = os.path.join(prof_dir, 'profile.mobileprovision')
-          with open(prof_path, 'wb') as f:
-              f.write(prof_data)
-          print(f"Profile written: {len(prof_data)} bytes")
+          import os, base64, subprocess
 
           # Create keychain
           kc_pwd = os.environ['KEYCHAIN_PASSWORD']
@@ -92,10 +75,34 @@ jobs:
           subprocess.run(['security', 'unlock-keychain', '-p', kc_pwd, kc_path], check=True)
           subprocess.run(['security', 'list-keychains', '-d', 'user', '-s', kc_path], check=True)
 
-          # Import certificate
           cert_pwd = os.environ['CERT_PASSWORD']
-          subprocess.run(['security', 'import', cert_path, '-k', kc_path, '-P', cert_pwd, '-A', '-T', '/usr/bin/codesign'], check=True)
+
+          # Import development certificate
+          dev_b64 = os.environ['DEV_CERT_BASE64']
+          dev_path = os.path.join(os.environ['RUNNER_TEMP'], 'dev_certificate.p12')
+          with open(dev_path, 'wb') as f:
+              f.write(base64.b64decode(dev_b64))
+          print(f"Dev cert: {os.path.getsize(dev_path)} bytes")
+          subprocess.run(['security', 'import', dev_path, '-k', kc_path, '-P', cert_pwd, '-A', '-T', '/usr/bin/codesign'], check=True)
+
+          # Import distribution certificate
+          dist_b64 = os.environ['DIST_CERT_BASE64']
+          dist_path = os.path.join(os.environ['RUNNER_TEMP'], 'dist_certificate.p12')
+          with open(dist_path, 'wb') as f:
+              f.write(base64.b64decode(dist_b64))
+          print(f"Dist cert: {os.path.getsize(dist_path)} bytes")
+          subprocess.run(['security', 'import', dist_path, '-k', kc_path, '-P', cert_pwd, '-A', '-T', '/usr/bin/codesign'], check=True)
+
           subprocess.run(['security', 'set-key-partition-list', '-S', 'apple-tool:,apple:', '-s', '-k', kc_pwd, kc_path], check=True)
+
+          # Install provisioning profile
+          prof_b64 = os.environ['PROFILE_BASE64']
+          prof_dir = os.path.expanduser('~/Library/MobileDevice/Provisioning Profiles')
+          os.makedirs(prof_dir, exist_ok=True)
+          prof_path = os.path.join(prof_dir, 'profile.mobileprovision')
+          with open(prof_path, 'wb') as f:
+              f.write(base64.b64decode(prof_b64))
+          print(f"Profile: {os.path.getsize(prof_path)} bytes")
 
           print("Code signing ready!")
           PYEOF
