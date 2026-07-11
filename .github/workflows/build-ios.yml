@@ -33,9 +33,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Setup CocoaPods
-        run: pod --version || sudo gem install cocoapods
-
       - name: Install dependencies
         run: flutter pub get
 
@@ -63,10 +60,9 @@ jobs:
           CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           PROFILE_BASE64: ${{ secrets.APPLE_PROVISION_PROFILE_BASE64 }}
           KEYCHAIN_PASSWORD: temp-keychain-pwd
-          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           python3 << 'PYEOF'
-          import os, base64, subprocess, re
+          import os, base64, subprocess
 
           kc_pwd = os.environ['KEYCHAIN_PASSWORD']
           kc_path = os.path.join(os.environ['RUNNER_TEMP'], 'app-signing.keychain-db')
@@ -93,17 +89,6 @@ jobs:
           prof_dir = os.path.expanduser('~/Library/MobileDevice/Provisioning Profiles')
           os.makedirs(prof_dir, exist_ok=True)
           with open(os.path.join(prof_dir, 'profile.mobileprovision'), 'wb') as f: f.write(base64.b64decode(prof_b64))
-
-          # Inject DEVELOPMENT_TEAM into Xcode project AFTER pod install
-          team_id = os.environ['TEAM_ID']
-          pbxproj = 'ios/Runner.xcodeproj/project.pbxproj'
-          with open(pbxproj, 'r') as f:
-              content = f.read()
-          content = re.sub(r'CODE_SIGN_STYLE = Automatic;', f'CODE_SIGN_STYLE = Automatic;\n\t\t\t\tDEVELOPMENT_TEAM = {team_id};', content)
-          with open(pbxproj, 'w') as f:
-              f.write(content)
-          print(f"Injected DEVELOPMENT_TEAM = {team_id}")
-
           print("Code signing ready!")
           PYEOF
 
@@ -113,6 +98,11 @@ jobs:
           EXPORT_METHOD: ${{ github.event.inputs.export_method || 'ad-hoc' }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          # Inject team into xcconfig files
+          for f in ios/Flutter/*.xcconfig; do
+            echo "DEVELOPMENT_TEAM = ${TEAM_ID}" >> "$f"
+          done
+
           cat > ios/ExportOptions.plist << 'PLISTEOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
