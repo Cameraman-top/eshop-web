@@ -73,15 +73,10 @@ jobs:
 
           cert_pwd = os.environ['CERT_PASSWORD']
 
-          dev_b64 = os.environ['DEV_CERT_BASE64']
-          dev_path = os.path.join(os.environ['RUNNER_TEMP'], 'dev_certificate.p12')
-          with open(dev_path, 'wb') as f: f.write(base64.b64decode(dev_b64))
-          subprocess.run(['security', 'import', dev_path, '-k', kc_path, '-P', cert_pwd, '-A', '-T', '/usr/bin/codesign'], check=True)
-
-          dist_b64 = os.environ['DIST_CERT_BASE64']
-          dist_path = os.path.join(os.environ['RUNNER_TEMP'], 'dist_certificate.p12')
-          with open(dist_path, 'wb') as f: f.write(base64.b64decode(dist_b64))
-          subprocess.run(['security', 'import', dist_path, '-k', kc_path, '-P', cert_pwd, '-A', '-T', '/usr/bin/codesign'], check=True)
+          for b64_str, name in [(os.environ['DEV_CERT_BASE64'], 'dev'), (os.environ['DIST_CERT_BASE64'], 'dist')]:
+              p = os.path.join(os.environ['RUNNER_TEMP'], f'{name}_certificate.p12')
+              with open(p, 'wb') as f: f.write(base64.b64decode(b64_str))
+              subprocess.run(['security', 'import', p, '-k', kc_path, '-P', cert_pwd, '-A', '-T', '/usr/bin/codesign'], check=True)
 
           subprocess.run(['security', 'set-key-partition-list', '-S', 'apple-tool:,apple:', '-s', '-k', kc_pwd, kc_path], check=True)
 
@@ -98,11 +93,6 @@ jobs:
           EXPORT_METHOD: ${{ github.event.inputs.export_method || 'ad-hoc' }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          # Inject team into xcconfig files
-          for f in ios/Flutter/*.xcconfig; do
-            echo "DEVELOPMENT_TEAM = ${TEAM_ID}" >> "$f"
-          done
-
           cat > ios/ExportOptions.plist << 'PLISTEOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
