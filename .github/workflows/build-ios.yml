@@ -84,17 +84,7 @@ jobs:
           os.makedirs(prof_dir, exist_ok=True)
           prof_path = os.path.join(prof_dir, 'eshop.mobileprovision')
           with open(prof_path, 'wb') as f: f.write(base64.b64decode(prof_b64))
-          
-          # Get profile UUID
-          import plistlib
-          prof_data = base64.b64decode(prof_b64)
-          # Profile starts with plist after CMS signature
-          idx = prof_data.find(b'<?xml')
-          if idx >= 0:
-              plist_data = prof_data[idx:]
-              pl = plistlib.loads(plist_data)
-              print(f"Profile UUID: {pl.get('UUID', 'unknown')}")
-              print(f"Profile name: {pl.get('Name', 'unknown')}")
+          print(f"Profile installed: {os.path.getsize(prof_path)} bytes")
           print("Code signing ready!")
           PYEOF
 
@@ -104,12 +94,11 @@ jobs:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           cd ios
-          
-          # Get the provisioning profile UUID
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/eshop.mobileprovision 2>/dev/null) 2>/dev/null)
+
+          # Extract profile UUID
+          PROFILE_UUID=$(security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/eshop.mobileprovision 2>/dev/null | /usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin)
           echo "Profile UUID: $PROFILE_UUID"
 
-          # Build with xcodebuild directly, specifying all signing params
           xcodebuild -workspace Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
@@ -121,7 +110,6 @@ jobs:
             CODE_SIGN_IDENTITY="iPhone Distribution" \
             archive
 
-          # Create ExportOptions.plist
           cat > ExportOptions.plist << PLISTEOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
