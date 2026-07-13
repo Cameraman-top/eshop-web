@@ -9,7 +9,7 @@ String _getBaseUrl() {
     final url = window.localStorage['API_BASE_URL'];
     if (url != null && url.isNotEmpty) return url;
   } catch (_) {}
-  return const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:8081');
+  return const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://eshop-api-l86g.onrender.com');
 }
 
 class ApiClient {
