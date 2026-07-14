@@ -36,7 +36,7 @@
     // 不在 index.html 硬写 localStorage('API_BASE_URL'); 这种"覆盖式"写法
     // 会让 api_client.dart 的 _getBaseUrl() 永远读取被写死的旧值。
     // 让 dart 端 String.fromEnvironment 的 defaultValue 生效即可，那样改 URL 只需改一处。
-    const serviceWorkerVersion = "3996724277";
+    const serviceWorkerVersion = "3228040059";
   </script>
   <!-- This script adds the flutter initialization JS code -->
   <script src="flutter.js" defer></script>
@@ -44,6 +44,14 @@
 <body>
   <script>
     window.addEventListener('load', function(ev) {
+      // 主动卸载任何已注册的旧 service worker。否则旧 SW 会持续 cache/serve
+      // 旧的 main.dart.js，导致部署修复后用户依然跑旧逻辑（搜索因 localStorage
+      // hack 走 localhost:8081 失败的现象那只可能是旧 main.dart.js）。
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          regs.forEach(function(r) { r.unregister(); });
+        });
+      }
       // Download main.dart.js
       _flutter.loader.loadEntrypoint({
         serviceWorker: {
@@ -53,6 +61,9 @@
           engineInitializer.initializeEngine().then(function(appRunner) {
             appRunner.runApp();
           });
+        }
+      });
+    });
         }
       });
     });

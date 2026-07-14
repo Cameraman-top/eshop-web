@@ -44,6 +44,14 @@
 <body>
   <script>
     window.addEventListener('load', function(ev) {
+      // 主动卸载任何已注册的旧 service worker。否则旧 SW 会持续 cache/serve
+      // 旧的 main.dart.js，导致部署修复后用户依然跑旧逻辑（搜索因 localStorage
+      // hack 走 localhost:8081 失败的现象那只可能是旧 main.dart.js）。
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          regs.forEach(function(r) { r.unregister(); });
+        });
+      }
       // Download main.dart.js
       _flutter.loader.loadEntrypoint({
         serviceWorker: {
@@ -53,6 +61,9 @@
           engineInitializer.initializeEngine().then(function(appRunner) {
             appRunner.runApp();
           });
+        }
+      });
+    });
         }
       });
     });
