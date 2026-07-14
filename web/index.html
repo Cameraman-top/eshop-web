@@ -44,19 +44,18 @@
 <body>
   <script>
     window.addEventListener('load', function(ev) {
-      // 主动卸载任何已注册的旧 service worker。否则旧 SW 会持续 cache/serve
-      // 旧的 main.dart.js，导致部署修复后用户依然跑旧逻辑（搜索因 localStorage
-      // hack 走 localhost:8081 失败的现象那只可能是旧 main.dart.js）。
+      // 主动卸载任何已注册的旧 service worker。
+      // 此前部署注册过 SW 缓存了旧版 main.dart.js（其内部硬写 localStorage 走 localhost:8081），
+      // 导致用户卡在旧版本上：每次 fetch 都被旧 SW 拦截去本地拿数据失败。
+      // 这一次彻底放弃注册新 SW（去掉 loadEntrypoint 的 serviceWorker 字段），
+      // 让 Flutter 不再写 SW，未来部署不再有 SW cache 中毒问题。
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(function(regs) {
           regs.forEach(function(r) { r.unregister(); });
         });
       }
-      // Download main.dart.js
+      // Download main.dart.js — 不传 serviceWorker，flutter.js 不会注册 SW
       _flutter.loader.loadEntrypoint({
-        serviceWorker: {
-          serviceWorkerVersion: serviceWorkerVersion,
-        },
         onEntrypointLoaded: function(engineInitializer) {
           engineInitializer.initializeEngine().then(function(appRunner) {
             appRunner.runApp();
