@@ -30,6 +30,23 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     _loadReviews();
   }
 
+  Future<void> _addToCart(BuildContext ctx, p) async {
+    final user = ctx.read<UserProvider>();
+    if (!user.isLoggedIn) {
+      ctx.read<CartProvider>().addItem(CartItem(
+        productId: p.id, name: p.name, price: p.price, image: p.image,
+        spec: _selectedSpec.isNotEmpty ? _selectedSpec : null, quantity: _quantity));
+      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('已加入本地购物车，登录后可同步'), duration: Duration(seconds: 1)));
+      return;
+    }
+    try {
+      await ApiClient().addToCart(user.userId!, p.id, spec: _selectedSpec.isNotEmpty ? _selectedSpec : null, quantity: _quantity);
+      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('已加入购物车'), duration: Duration(seconds: 1)));
+    } catch (_) {
+      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('加入失败，请重试')));
+    }
+  }
+
   Future<void> _loadReviews() async {
     try {
       final res = await ApiClient().dio.get('/api/reviews', queryParameters: {'product_id': widget.product.id, 'page': _reviewPage});
@@ -181,10 +198,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             IconButton(icon: const Icon(Icons.chat_bubble_outline), onPressed: () => Navigator.pushNamed(context, '/chat')),
             Expanded(
               child: OutlinedButton(
-                onPressed: () {
-                  context.read<CartProvider>().addItem(CartItem(productId: p.id, name: p.name, price: p.price, image: p.image, spec: _selectedSpec.isNotEmpty ? _selectedSpec : null, quantity: _quantity));
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已加入购物车'), duration: Duration(seconds: 1)));
-                },
+                onPressed: () => _addToCart(context, p),
                 style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFFF4D4F), side: const BorderSide(color: Color(0xFFFF4D4F)), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24))),
                 child: const Text('加入购物车', style: TextStyle(fontSize: 15)),
               ),
