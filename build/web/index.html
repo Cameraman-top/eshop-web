@@ -33,10 +33,10 @@
   <link rel="manifest" href="manifest.json">
 
   <script>
-    // API Base URL — change this to your Render backend URL
-    window.localStorage.setItem('API_BASE_URL', 'http://localhost:8081');
-    // The value below is injected by flutter build, do not touch.
-    const serviceWorkerVersion = "336215030";
+    // 不在 index.html 硬写 localStorage('API_BASE_URL'); 这种"覆盖式"写法
+    // 会让 api_client.dart 的 _getBaseUrl() 永远读取被写死的旧值。
+    // 让 dart 端 String.fromEnvironment 的 defaultValue 生效即可，那样改 URL 只需改一处。
+    const serviceWorkerVersion = "3996724277";
   </script>
   <!-- This script adds the flutter initialization JS code -->
   <script src="flutter.js" defer></script>
