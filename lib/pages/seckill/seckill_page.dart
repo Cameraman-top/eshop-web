@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:dio/dio.dart';
 import '../../providers/user_provider.dart';
 import '../../services/api_client.dart';
 
@@ -76,11 +77,16 @@ class _SeckillPageState extends State<SeckillPage> {
     final user = context.read<UserProvider>();
     if (!user.isLoggedIn) { Navigator.pushNamed(context, '/login'); return; }
     try {
-      await ApiClient().createOrder(user.token!, [{'product_id': e['product_id'] ?? 0, 'quantity': 1}]);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('抢购成功！')));
+      // P1-5: 走专用秒杀下单接口，按 seckill_price 真上单
+      final res = await ApiClient().dio.post('/api/seckill/order',
+        options: Options(headers: {'Authorization': 'Bearer ${user.token}'}),
+        data: {'seckill_id': e['id']});
+      final orderData = res.data['data'];
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('抢购成功！订单号 ${orderData['order_no']}')));
       _load();
     } catch (err) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('抢购失败: $err')));
+      final msg = err is DioException ? (err.response?.data?['msg'] ?? err.message) : err.toString();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('抢购失败: $msg')));
     }
   }
 }

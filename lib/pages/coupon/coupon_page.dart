@@ -58,6 +58,14 @@ class _CouponPageState extends State<CouponPage> with SingleTickerProviderStateM
     ]));
     return ListView.builder(padding: const EdgeInsets.all(12), itemCount: coupons.length, itemBuilder: (context, i) {
       final c = coupons[i];
+      // 字段对齐：
+      //   coupons 表只有 title (没 name)、amount、min_amount、expire_days (没 expire_at)、total_count/used_count
+      //   user_coupons GET /api/coupons/my 返 join 出相同字段
+      final title = (c['title'] ?? c['name'] ?? '') as String;
+      final amount = (c['amount'] ?? c['discount'] ?? 0) as num;
+      final minAmount = (c['min_amount'] ?? 0) as num;
+      final expireDays = c['expire_days'] ?? 0;
+      final remaining = (c['total_count'] ?? 0) - (c['used_count'] ?? 0);
       return Card(
         margin: const EdgeInsets.only(bottom: 10),
         child: IntrinsicHeight(child: Row(children: [
@@ -65,21 +73,25 @@ class _CouponPageState extends State<CouponPage> with SingleTickerProviderStateM
             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('¥', style: TextStyle(color: Colors.white, fontSize: 16)),
-                Text('${c['discount'] ?? c['amount'] ?? 0}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+                Text('$amount', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
               ]),
-              Text(c['type'] == 'discount' ? '折' : '元', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              const Text('元', style: TextStyle(color: Colors.white70, fontSize: 12)),
             ])),
           Expanded(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(c['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
             const SizedBox(height: 4),
-            Text('满 ¥${c['min_amount'] ?? 0} 可用', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+            Text('满 ¥$minAmount 可用', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
             const SizedBox(height: 4),
-            Text('有效期: ${c['expire_at'] ?? ''}', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+            Text(expireDays > 0 ? '有效期: $expireDays 天' : '有效期: 长期', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+            if (showClaim && (c['total_count'] != null)) ...[
+              const SizedBox(height: 4),
+              Text('剩余 $remaining 张', style: TextStyle(fontSize: 11, color: remaining < 50 ? const Color(0xFFFF4D4F) : Colors.grey[400])),
+            ],
           ]))),
           if (showClaim) Padding(padding: const EdgeInsets.only(right: 12), child: ElevatedButton(
-            onPressed: () => _claim(c),
+            onPressed: remaining > 0 ? () => _claim(c) : null,
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4D4F), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
-            child: const Text('领取'),
+            child: Text(remaining > 0 ? '领取' : '已抢完'),
           )),
         ])),
       );
