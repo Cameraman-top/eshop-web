@@ -6,6 +6,7 @@ import 'providers/cart_provider.dart';
 import 'providers/product_provider.dart';
 import 'providers/user_provider.dart';
 import 'pages/home/home_page.dart';
+import 'pages/category/category_page.dart';
 import 'pages/cart/cart_page.dart';
 import 'pages/profile/profile_page.dart';
 import 'pages/product_detail/product_detail_page.dart';
@@ -51,6 +52,9 @@ class EShopApp extends StatelessWidget {
             case '/product_detail':
               final product = settings.arguments as Product;
               return MaterialPageRoute(builder: (_) => ProductDetailPage(product: product));
+            case '/category':
+              final catId = settings.arguments is String ? settings.arguments as String : null;
+              return MaterialPageRoute(builder: (_) => CategoryPage(initialCategoryId: catId));
             case '/orders':
               return MaterialPageRoute(builder: (_) => const OrderPage());
             case '/chat':
