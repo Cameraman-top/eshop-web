@@ -47,5 +47,5 @@ class Product {
   double get discount =>
       originalPrice > 0 ? (1 - price / originalPrice) : 0;
 
-  String get discountText => '${(discount * 100).toInt()}% OFF';
+  String get discountText => '${(discount * 100).round()}% OFF';
 }
