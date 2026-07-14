@@ -22,12 +22,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   bool _favorited = false;
   List<Map<String, dynamic>> _reviews = [];
   int _reviewPage = 0;
+  bool _loadingFav = false;
 
   @override
   void initState() {
     super.initState();
     _selectedSpec = widget.product.specs.isNotEmpty ? widget.product.specs.first : '';
     _loadReviews();
+    _loadFavoriteStatus();
   }
 
   Future<void> _addToCart(BuildContext ctx, p) async {
@@ -50,11 +52,39 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   Future<void> _loadReviews() async {
     try {
       final res = await ApiClient().dio.get('/api/reviews', queryParameters: {'product_id': widget.product.id, 'page': _reviewPage});
-      if (mounted) setState(() => _reviews = List<Map<String, dynamic>>.from((res.data['data'] as List).map((e) => Map<String, dynamic>.from(e))));
+      // P1-3: 后端现在返 {code:0,data:[...]}; 兼容裸 list
+      final list = (res.data is List) ? res.data : (res.data['data'] as List? ?? []);
+      if (mounted) setState(() => _reviews = List<Map<String, dynamic>>.from(list.map((e) => Map<String, dynamic>.from(e))));
     } catch (_) {}
   }
 
-  void _toggleFavorite() => setState(() => _favorited = !_favorited);
+  Future<void> _loadFavoriteStatus() async {
+    final user = context.read<UserProvider>();
+    if (!user.isLoggedIn) return;
+    try {
+      final favs = await ApiClient().getFavorites(user.token!);
+      final idStr = widget.product.id;
+      final hit = favs.any((f) => f['product_id'].toString() == idStr);
+      if (mounted) setState(() => _favorited = hit);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleFavorite() async {
+    final user = context.read<UserProvider>();
+    if (!user.isLoggedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先登录')));
+      return;
+    }
+    if (_loadingFav) return;
+    setState(() { _favorited = !_favorited; _loadingFav = true; });
+    try {
+      await ApiClient().toggleFavorite(user.token!, int.parse(widget.product.id), _favorited);
+    } catch (_) {
+      if (mounted) setState(() => _favorited = !_favorited);
+    } finally {
+      if (mounted) setState(() => _loadingFav = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +93,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       appBar: AppBar(
         title: const Text('商品详情'),
         actions: [
-          IconButton(icon: Icon(_favorited ? Icons.favorite : Icons.favorite_border, color: _favorited ? const Color(0xFFFF4D4F) : null), onPressed: _toggleFavorite),
+          IconButton(icon: Icon(_favorited ? Icons.favorite : Icons.favorite_border, color: _favorited ? const Color(0xFFFF4D4F) : null), onPressed: () => _toggleFavorite()),
         ],
       ),
       body: CustomScrollView(
