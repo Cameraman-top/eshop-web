@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
 import '../../providers/user_provider.dart';
 import '../../services/api_client.dart';
+import '../social/user_list_page.dart';
 
 class UserProfilePage extends StatefulWidget {
   final int userId;
@@ -34,12 +35,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   Future<void> _toggleFollow() async {
     final user = context.read<UserProvider>();
-    if (!user.isLoggedIn) return;
-    final path = _isFollowing ? '/api/unfollow' : '/api/follow';
+    if (!user.isLoggedIn) { Navigator.pushNamed(context, '/login'); return; }
     try {
-      await ApiClient().dio.post(path, data: {'user_id': widget.userId},
-        options: Options(headers: {'Authorization': 'Bearer ${user.token}'}),
-      );
+      await ApiClient().follow(widget.userId, user.token!, unfollow: _isFollowing);
       setState(() => _isFollowing = !_isFollowing);
     } catch (_) {}
   }
@@ -69,11 +67,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
               if ((u['bio'] ?? '').isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(u['bio'] ?? '', style: TextStyle(color: Colors.white70, fontSize: 14))),
               const SizedBox(height: 16),
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                _stat('${followers}', '粉丝'),
+                _stat('${followers}', '粉丝', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => UserListPage(userId: widget.userId, isFollowers: true, title: '粉丝')))),
                 const SizedBox(width: 40),
-                _stat('${following}', '关注'),
+                _stat('${following}', '关注', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => UserListPage(userId: widget.userId, isFollowers: false, title: '关注')))),
                 const SizedBox(width: 40),
-                _stat('${posts.length}', '笔记'),
+                _stat('${posts.length}', '笔记', onTap: null),
               ]),
               const SizedBox(height: 16),
               // Follow button
@@ -108,7 +106,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     Padding(padding: const EdgeInsets.fromLTRB(8, 0, 8, 8), child: Row(children: [
                       Icon(Icons.favorite_border, size: 14, color: Colors.grey[400]),
                       const SizedBox(width: 4),
-                      Text('${p['likes'] ?? 0}', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+                      Text('${p['like_count'] ?? 0}', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
                     ])),
                   ]),
                 );
@@ -119,10 +117,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
-  Widget _stat(String value, String label) {
-    return Column(children: [
-      Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-      Text(label, style: TextStyle(fontSize: 12, color: Colors.white70)),
-    ]);
+  Widget _stat(String value, String label, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Column(children: [
+        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.white70)),
+      ]),
+    );
   }
 }
