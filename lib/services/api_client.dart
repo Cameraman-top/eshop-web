@@ -26,15 +26,35 @@ class ApiClient {
   ApiClient._internal() {
     _dio = Dio(BaseOptions(
       baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 60),
       headers: {'Content-Type': 'application/json'},
     ));
     _chatDio = Dio(BaseOptions(
       baseUrl: chatBaseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 60),
       headers: {'Content-Type': 'application/json'},
+    ));
+    _addRetry(_dio);
+    _addRetry(_chatDio);
+  }
+
+  void _addRetry(Dio d) {
+    d.interceptors.add(InterceptorsWrapper(
+      onError: (e, h) async {
+        final retried = e.requestOptions.extra['retried'] == true;
+        final retriable = e.type == DioExceptionType.connectionError ||
+            e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.receiveTimeout;
+        if (retried || !retriable) return h.reject(e);
+        e.requestOptions.extra['retried'] = true;
+        try {
+          return h.resolve(await d.fetch(e.requestOptions));
+        } catch (e2) {
+          return h.reject(e2 as DioException);
+        }
+      },
     ));
   }
 
