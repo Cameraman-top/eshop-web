@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
 import '../../services/api_client.dart';
 import '../profile/user_profile_page.dart';
+import 'post_detail_page.dart';
 
 class SocialPage extends StatefulWidget {
   const SocialPage({super.key});
@@ -94,33 +95,42 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
   Widget _buildPostCard(Map<String, dynamic> post) {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        GestureDetector(
-          onTap: () {
-            final uid = post['user_id'];
-            if (uid != null) Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfilePage(userId: uid is int ? uid : int.parse('$uid'))));
-          },
-          child: Row(children: [
-          CircleAvatar(radius: 18, backgroundColor: Colors.grey[200], child: Text((post['nickname'] ?? '?')[0], style: const TextStyle(fontSize: 14))),
-          const SizedBox(width: 10),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(post['nickname'] ?? '匿名', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-            Text(post['created_at'] ?? '', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+      child: InkWell(
+        onTap: () {
+          final pid = post['id'];
+          if (pid != null) Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailPage(postId: pid is int ? pid : int.parse('$pid'))));
+        },
+        child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          GestureDetector(
+            onTap: () {
+              final uid = post['user_id'];
+              if (uid != null) Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfilePage(userId: uid is int ? uid : int.parse('$uid'))));
+            },
+            child: Row(children: [
+            CircleAvatar(radius: 18, backgroundColor: Colors.grey[200], child: Text((post['nickname'] ?? '?')[0], style: const TextStyle(fontSize: 14))),
+            const SizedBox(width: 10),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(post['nickname'] ?? '匿名', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              Text(post['created_at'] ?? '', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+            ]),
+            ]),
+          ),
+          if ((post['title'] ?? '').isNotEmpty) ...[const SizedBox(height: 10), Text(post['title'] ?? '', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))],
+          const SizedBox(height: 8),
+          Text(post['content'] ?? '', style: const TextStyle(fontSize: 14, height: 1.5), maxLines: 4, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 10),
+          Row(children: [
+            _actionChip(Icons.favorite_border, '${post['like_count'] ?? 0}', () => _toggleLike(post)),
+            const SizedBox(width: 16),
+            _actionChip(Icons.chat_bubble_outline, '${post['comment_count'] ?? 0}', () {
+              final pid = post['id'];
+              if (pid != null) Navigator.push(context, MaterialPageRoute(builder: (_) => PostDetailPage(postId: pid is int ? pid : int.parse('$pid'))));
+            }),
+            const Spacer(),
+            _actionChip(Icons.share_outlined, '分享', () {}),
           ]),
-          ]),
-        ),
-        if ((post['title'] ?? '').isNotEmpty) ...[const SizedBox(height: 10), Text(post['title'] ?? '', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))],
-        const SizedBox(height: 8),
-        Text(post['content'] ?? '', style: const TextStyle(fontSize: 14, height: 1.5), maxLines: 4, overflow: TextOverflow.ellipsis),
-        const SizedBox(height: 10),
-        Row(children: [
-          _actionChip(Icons.favorite_border, '${post['like_count'] ?? 0}', () => _toggleLike(post)),
-          const SizedBox(width: 16),
-          _actionChip(Icons.chat_bubble_outline, '${post['comment_count'] ?? 0}', () {}),
-          const Spacer(),
-          _actionChip(Icons.share_outlined, '分享', () {}),
-        ]),
-      ])),
+        ])),
+      ),
     );
   }
 
@@ -199,7 +209,17 @@ class _SocialPageState extends State<SocialPage> with SingleTickerProviderStateM
           leading: CircleAvatar(backgroundColor: Colors.grey[200], child: Text((u['nickname'] ?? '?')[0])),
           title: Text(u['nickname'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text(u['bio'] ?? ''),
-          trailing: OutlinedButton(onPressed: () {}, child: Text('关注', style: TextStyle(fontSize: 12))),
+          trailing: OutlinedButton(
+            onPressed: () async {
+              final user = context.read<UserProvider>();
+              if (!user.isLoggedIn) { Navigator.pushNamed(context, '/login'); return; }
+              try {
+                await ApiClient().follow(u['id'] is int ? u['id'] : int.parse('${u['id']}'), user.token!);
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已关注'), duration: Duration(seconds: 1)));
+              } catch (_) {}
+            },
+            child: const Text('关注', style: TextStyle(fontSize: 12)),
+          ),
         ),
       );
     });

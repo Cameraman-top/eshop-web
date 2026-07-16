@@ -242,6 +242,42 @@ class ApiClient {
     return res.data;
   }
 
+  Future<Map<String, dynamic>?> getPostDetail(int id) async {
+    final res = await _dio.get('/api/posts/$id');
+    final d = res.data;
+    if (d is Map<String, dynamic>) return d;
+    if (d is List) return null;
+    return d is Map ? Map<String, dynamic>.from(d) : null;
+  }
+
+  Future<void> addComment(int postId, String token, String content, {int parentId = 0}) async {
+    await _dio.post('/api/comments',
+      options: Options(headers: {'Authorization': 'Bearer $token'}),
+      data: {'post_id': postId, 'content': content, 'parent_id': parentId},
+    );
+  }
+
+  Future<void> follow(int targetId, String token, {bool unfollow = false}) async {
+    await _dio.post('/api/follow',
+      options: Options(headers: {'Authorization': 'Bearer $token'}),
+      data: {'action': unfollow ? 'unfollow' : 'follow', 'target_id': targetId},
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getFollowers(int userId) async {
+    final res = await _dio.get('/api/followers', queryParameters: {'user_id': userId});
+    final d = res.data;
+    final data = d is List ? d : (d is Map ? d['data'] : null);
+    return List<Map<String, dynamic>>.from((data as List?) ?? []);
+  }
+
+  Future<List<Map<String, dynamic>>> getFollowing(int userId) async {
+    final res = await _dio.get('/api/following', queryParameters: {'user_id': userId});
+    final d = res.data;
+    final data = d is List ? d : (d is Map ? d['data'] : null);
+    return List<Map<String, dynamic>>.from((data as List?) ?? []);
+  }
+
   Future<void> toggleLike(int postId, String token, bool like) async {
     await _dio.post('/api/like',
       options: Options(headers: {'Authorization': 'Bearer $token'}),

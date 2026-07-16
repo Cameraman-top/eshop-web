@@ -14,6 +14,7 @@ import 'pages/order/order_page.dart';
 import 'pages/chat/chat_page.dart';
 import 'pages/login/login_page.dart';
 import 'pages/social/social_page.dart';
+import 'pages/social/post_detail_page.dart';
 import 'pages/group_buy/group_buy_page.dart';
 import 'pages/seckill/seckill_page.dart';
 import 'pages/coupon/coupon_page.dart';
@@ -63,6 +64,9 @@ class EShopApp extends StatelessWidget {
               return MaterialPageRoute(builder: (_) => const LoginPage());
             case '/social':
               return MaterialPageRoute(builder: (_) => const SocialPage());
+            case '/post_detail':
+              final pid = settings.arguments as int;
+              return MaterialPageRoute(builder: (_) => PostDetailPage(postId: pid));
             case '/group_buy':
               return MaterialPageRoute(builder: (_) => const GroupBuyPage());
             case '/seckill':
