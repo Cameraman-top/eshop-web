@@ -75,13 +75,14 @@ class _VideoUploadPageState extends State<VideoUploadPage> {
           setState(() => _uploading = false);
           return;
         }
-        await dio.post('/api/post/add', data: {
+        await dio.post('/api/posts', data: {
           'title': title,
           'content': _descCtrl.text.trim(),
           'media_type': 'video',
           'video_url': url,
           'images': '[]',
-        }, options: Options(headers: {'Authorization': user.token}));
+          'action': 'create',
+        }, options: Options(headers: {'Authorization': 'Bearer ${user.token}'}));
       } else if (_selectedFile != null) {
         // Read file as bytes
         final reader = html.FileReader();
@@ -94,7 +95,7 @@ class _VideoUploadPageState extends State<VideoUploadPage> {
           'media_type': 'video',
           'video': MultipartFile.fromBytes(bytes, filename: _selectedFile!.name),
         });
-        await dio.post('/api/post/add', data: formData, options: Options(headers: {'Authorization': user.token}));
+        await dio.post('/api/posts', data: formData, options: Options(headers: {'Authorization': 'Bearer ${user.token}'}));
       }
 
       if (mounted) {

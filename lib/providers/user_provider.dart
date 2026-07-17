@@ -64,7 +64,8 @@ class UserProvider extends ChangeNotifier {
       return {'success': true};
     } catch (e) {
       _loading = false; notifyListeners();
-      return {'success': false, 'msg': e.toString()};
+      final msg = e.toString().replaceFirst('Exception: ', '').replaceFirst('Exception: ', '');
+      return {'success': false, 'msg': msg};
     }
   }
 
@@ -81,7 +82,8 @@ class UserProvider extends ChangeNotifier {
       return {'success': true};
     } catch (e) {
       _loading = false; notifyListeners();
-      return {'success': false, 'msg': e.toString()};
+      final msg = e.toString().replaceFirst('Exception: ', '').replaceFirst('Exception: ', '');
+      return {'success': false, 'msg': msg};
     }
   }
 

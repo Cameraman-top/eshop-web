@@ -179,20 +179,28 @@ class ApiClient {
 
   // ===== User =====
   Future<Map<String, dynamic>> login(String phone, String password) async {
-    final res = await _dio.post('/api/user/login', data: {
-      'phone': phone,
-      'password': password,
-    });
-    return res.data['data'];
+    try {
+      final res = await _dio.post('/api/user/login', data: {'phone': phone, 'password': password});
+      return res.data['data'];
+    } on DioException catch (e) {
+      throw Exception(_srvMsg(e));
+    }
   }
 
   Future<Map<String, dynamic>> register(String phone, String password, {String? nickname}) async {
-    final res = await _dio.post('/api/user/register', data: {
-      'phone': phone,
-      'password': password,
-      'nickname': nickname,
-    });
-    return res.data['data'];
+    try {
+      final res = await _dio.post('/api/user/register', data: {'phone': phone, 'password': password, 'nickname': nickname});
+      return res.data['data'];
+    } on DioException catch (e) {
+      throw Exception(_srvMsg(e));
+    }
+  }
+
+  String _srvMsg(DioException e) {
+    final d = e.response?.data;
+    if (d is Map && d['msg'] is String) return d['msg'] as String;
+    if (e.type == DioExceptionType.connectionError || e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.receiveTimeout) return '网络连接失败，请稍后重试';
+    return '请求失败 (${e.response?.statusCode ?? '?'})';
   }
 
   // ===== Chat =====
