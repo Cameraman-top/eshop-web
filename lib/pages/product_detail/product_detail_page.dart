@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
+import 'dart:convert';
 import '../../models/product.dart';
 import '../../models/cart_item.dart';
 import '../../providers/cart_provider.dart';
@@ -52,10 +53,19 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   Future<void> _loadReviews() async {
     try {
       final res = await ApiClient().dio.get('/api/reviews', queryParameters: {'product_id': widget.product.id, 'page': _reviewPage});
-      // P1-3: 后端现在返 {code:0,data:[...]}; 兼容裸 list
       final list = (res.data is List) ? res.data : (res.data['data'] as List? ?? []);
       if (mounted) setState(() => _reviews = List<Map<String, dynamic>>.from(list.map((e) => Map<String, dynamic>.from(e))));
     } catch (_) {}
+  }
+
+  List<String> _reviewImages(Map<String, dynamic> r) {
+    final raw = r['images'];
+    if (raw == null) return [];
+    if (raw is List) return List<String>.from(raw);
+    if (raw is String && raw.startsWith('[')) {
+      try { return List<String>.from(jsonDecode(raw)); } catch (_) { return []; }
+    }
+    return [];
   }
 
   Future<void> _loadFavoriteStatus() async {
@@ -84,6 +94,52 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     } finally {
       if (mounted) setState(() => _loadingFav = false);
     }
+  }
+
+  void _writeReview() {
+    final user = context.read<UserProvider>();
+    if (!user.isLoggedIn) { Navigator.pushNamed(context, '/login'); return; }
+    int rating = 5;
+    final contentCtrl = TextEditingController();
+    List<String> selectedImgs = [];
+    const palette = ['💰','🌟','🎁','👍','❤️','🔥','✨','📸','💯'];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setModal) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('写评价', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 14),
+          Row(children: List.generate(5, (i) => GestureDetector(onTap: () => setModal(() => rating = i + 1), child: Icon(i < rating ? Icons.star : Icons.star_border, size: 32, color: Colors.amber[600])))),
+          const SizedBox(height: 12),
+          TextField(controller: contentCtrl, maxLines: 3, decoration: const InputDecoration(labelText: '评价内容', border: OutlineInputBorder())),
+          const SizedBox(height: 12),
+          const Text('添加图片（emoji）', style: TextStyle(fontSize: 13, color: Colors.black54)),
+          const SizedBox(height: 6),
+          Wrap(spacing: 8, runSpacing: 4, children: palette.map((e) {
+            final on = selectedImgs.contains(e);
+            return GestureDetector(onTap: () => setModal(() { if (on) selectedImgs.remove(e); else if (selectedImgs.length < 3) selectedImgs.add(e); }), child: Container(width: 44, height: 44, decoration: BoxDecoration(color: on ? const Color(0xFFFF4D4F).withOpacity(0.12) : Colors.grey[100], border: Border.all(color: on ? const Color(0xFFFF4D4F) : Colors.grey[200]!), borderRadius: BorderRadius.circular(8)), child: Center(child: Text(e, style: const TextStyle(fontSize: 24)))));
+          }).toList()),
+          const SizedBox(height: 16),
+          SizedBox(width: double.infinity, child: ElevatedButton(
+            onPressed: () async {
+              if (contentCtrl.text.trim().isEmpty) { ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('请填写评价内容'))); return; }
+              try {
+                await ApiClient().addReview(user.token!, int.parse(widget.product.id), rating, contentCtrl.text.trim(), images: selectedImgs);
+                if (ctx.mounted) { Navigator.pop(ctx); _loadReviews(); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('评价成功'), duration: Duration(seconds: 1))); }
+              } catch (e) {
+                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('评价失败: $e')));
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4D4F), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+            child: const Text('提交'),
+          )),
+          const SizedBox(height: 20),
+        ]),
+      )),
+    );
+    contentCtrl.dispose();
   }
 
   @override
@@ -194,7 +250,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                 Row(children: [
                   const Text('商品评价', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                   const Spacer(),
-                  Text('全部 ${_reviews.length}', style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+                  TextButton.icon(onPressed: _writeReview, icon: const Icon(Icons.edit, size: 16), label: const Text('写评价', style: TextStyle(fontSize: 13))),
                 ]),
                 if (_reviews.isEmpty)
                   Padding(padding: const EdgeInsets.all(20), child: Center(child: Text('暂无评价', style: TextStyle(color: Colors.grey[400]))))
@@ -211,6 +267,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                         Row(children: List.generate(r['rating'] ?? 5, (_) => Icon(Icons.star, size: 12, color: Colors.amber[600]))),
                       ]),
                       if ((r['content'] ?? '').isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(r['content'] ?? '', style: TextStyle(fontSize: 13, color: Colors.grey[700]))),
+                      if (_reviewImages(r).isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Wrap(spacing: 6, runSpacing: 6, children: _reviewImages(r).map((img) => Container(width: 64, height: 64, decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: Center(child: Text(img, style: const TextStyle(fontSize: 32))))).toList())),
                       Padding(padding: const EdgeInsets.only(top: 4), child: Text(r['created_at'] ?? '', style: TextStyle(fontSize: 11, color: Colors.grey[400]))),
                     ]),
                   )),

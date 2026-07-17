@@ -318,10 +318,10 @@ class ApiClient {
     return List<Map<String, dynamic>>.from(data);
   }
 
-  Future<void> addReview(String token, int productId, int rating, String content) async {
+  Future<void> addReview(String token, int productId, int rating, String content, {List<String> images = const []}) async {
     await _dio.post('/api/reviews',
       options: Options(headers: {'Authorization': 'Bearer $token'}),
-      data: {'product_id': productId, 'rating': rating, 'content': content},
+      data: {'product_id': productId, 'rating': rating, 'content': content, 'images': images},
     );
   }
 
