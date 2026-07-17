@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
+import 'dart:convert';
 import 'dart:html' as html;
 import '../../providers/user_provider.dart';
 import '../../services/api_client.dart';
@@ -84,18 +85,21 @@ class _VideoUploadPageState extends State<VideoUploadPage> {
           'action': 'create',
         }, options: Options(headers: {'Authorization': 'Bearer ${user.token}'}));
       } else if (_selectedFile != null) {
-        // Read file as bytes
         final reader = html.FileReader();
         reader.readAsArrayBuffer(_selectedFile!);
         await reader.onLoad.first;
         final bytes = reader.result as List<int>;
-        final formData = FormData.fromMap({
+        final b64 = base64Encode(bytes);
+        final mime = _selectedFile!.type.isNotEmpty ? _selectedFile!.type : 'video/mp4';
+        final dataUrl = 'data:$mime;base64,$b64';
+        await dio.post('/api/posts', data: {
           'title': title,
           'content': _descCtrl.text.trim(),
           'media_type': 'video',
-          'video': MultipartFile.fromBytes(bytes, filename: _selectedFile!.name),
-        });
-        await dio.post('/api/posts', data: formData, options: Options(headers: {'Authorization': 'Bearer ${user.token}'}));
+          'video_url': dataUrl,
+          'images': '[]',
+          'action': 'create',
+        }, options: Options(headers: {'Authorization': 'Bearer ${user.token}'}));
       }
 
       if (mounted) {
