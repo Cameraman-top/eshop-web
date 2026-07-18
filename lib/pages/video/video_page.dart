@@ -157,7 +157,7 @@ class _VideoPageState extends State<VideoPage> {
       onTap: _togglePlayPause,
       onDoubleTap: () => _doubleTapLike(v),
       child: Stack(children: [
-        _VideoInjector(videoId: 'video-$i', url: url, pageIndex: i, isCurrent: i == _current && widget.isActive),
+        _VideoInjector(videoId: 'video-$i', url: (i == _current && widget.isActive) ? url : '', pageIndex: i, isCurrent: i == _current && widget.isActive),
         if (_showPlayIcon && i == _current)
           const Center(child: Icon(Icons.play_arrow, color: Colors.white70, size: 80)),
         if (_showHeart && i == _current)
@@ -272,6 +272,11 @@ class _VideoInjectorState extends State<_VideoInjector> {
   @override
   void didUpdateWidget(_VideoInjector old) {
     super.didUpdateWidget(old);
+    if (widget.url.isEmpty && old.url.isNotEmpty) {
+      _container?.remove();
+      _container = null; _video = null; _created = false;
+      return;
+    }
     if (!_created && widget.url.isNotEmpty) _createContainer();
     if (widget.isCurrent != old.isCurrent && _container != null) {
       if (widget.isCurrent) { _container!.style.display = 'block'; _video?.play().catchError((_) {}); }
