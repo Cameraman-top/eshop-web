@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:html' as html;
+import 'dart:ui_web' as ui_web;
 import '../../providers/user_provider.dart';
 import '../../services/api_client.dart';
 import '../profile/user_profile_page.dart';
@@ -231,63 +232,50 @@ class _VideoInjector extends StatefulWidget {
 }
 
 class _VideoInjectorState extends State<_VideoInjector> {
-  html.DivElement? _container;
   html.VideoElement? _video;
-  bool _created = false;
+  bool _registered = false;
+  String get _viewId => 'video-view-${widget.pageIndex}';
 
   @override
-  void initState() { super.initState(); _createContainer(); }
+  void initState() { super.initState(); _register(); }
 
-  void _createContainer() {
-    if (_created || widget.url.isEmpty) return;
-    _created = true;
-    _container = html.DivElement()
-      ..dataset['videoPage'] = '${widget.pageIndex}'
-      ..style.position = 'fixed'
-      ..style.top = '0'
-      ..style.left = '0'
-      ..style.width = '100vw'
-      ..style.height = '100vh'
-      ..style.zIndex = '9999'
-      ..style.pointerEvents = 'none'
-      ..style.backgroundColor = 'black'
-      ..style.display = widget.isCurrent ? 'block' : 'none';
+  void _register() {
+    if (_registered || widget.url.isEmpty) return;
+    _registered = true;
     _video = html.VideoElement()
       ..src = widget.url
       ..loop = true
       ..muted = true
       ..controls = false
-      ..autoplay = widget.isCurrent
-      ..style.position = 'absolute'
-      ..style.top = '0'
-      ..style.left = '0'
+      ..autoplay = false
       ..style.width = '100%'
       ..style.height = '100%'
-      ..style.objectFit = 'cover';
-    _container!.append(_video!);
-    html.document.body?.append(_container!);
-    if (widget.isCurrent) _video!.play().catchError((_) {});
+      ..style.objectFit = 'cover'
+      ..style.backgroundColor = 'black';
+    ui_web.platformViewRegistry.registerViewFactory(_viewId, (_, __) => _video!);
+    if (widget.isCurrent) WidgetsBinding.instance.addPostFrameCallback((_) => _video?.play().catchError((_) {}));
   }
 
   @override
   void didUpdateWidget(_VideoInjector old) {
     super.didUpdateWidget(old);
-    if (widget.url.isEmpty && old.url.isNotEmpty) {
-      _container?.remove();
-      _container = null; _video = null; _created = false;
-      return;
+    if (widget.url != old.url && _video != null) {
+      _video!.src = widget.url;
+      if (widget.isCurrent) _video!.play().catchError((_) {});
+      else _video!.pause();
     }
-    if (!_created && widget.url.isNotEmpty) _createContainer();
-    if (widget.isCurrent != old.isCurrent && _container != null) {
-      if (widget.isCurrent) { _container!.style.display = 'block'; _video?.play().catchError((_) {}); }
-      else { _container!.style.display = 'none'; _video?.pause(); }
+    if (widget.isCurrent != old.isCurrent && _video != null) {
+      if (widget.isCurrent) _video!.play().catchError((_) {});
+      else _video!.pause();
     }
-    if (widget.url != old.url && _video != null) { _video!.src = widget.url; if (widget.isCurrent) _video!.play().catchError((_) {}); }
   }
 
   @override
-  void dispose() { _container?.remove(); super.dispose(); }
+  void dispose() { _video?.pause(); super.dispose(); }
 
   @override
-  Widget build(BuildContext context) => const SizedBox.expand();
+  Widget build(BuildContext context) {
+    if (!_registered) return Container(color: Colors.black);
+    return HtmlElementView(viewType: _viewId);
+  }
 }
