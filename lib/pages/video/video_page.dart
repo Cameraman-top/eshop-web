@@ -23,16 +23,10 @@ class _VideoPageState extends State<VideoPage> {
   String? _error;
   bool _showPlayIcon = false;
   bool _showHeart = false;
+  bool _playing = true;
 
   @override
-  void initState() {
-    super.initState();
-    _load();
-    _controller.addListener(() {
-      final page = _controller.page?.round() ?? 0;
-      if (page != _current) setState(() => _current = page);
-    });
-  }
+  void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
     try {
@@ -46,47 +40,9 @@ class _VideoPageState extends State<VideoPage> {
     if (mounted) setState(() => _loading = false);
   }
 
-  @override
-  void didUpdateWidget(VideoPage old) {
-    super.didUpdateWidget(old);
-    if (!widget.isActive && old.isActive) _hideAllVideos();
-  }
-
-  void _hideAllVideos() {
-    final els = html.document.querySelectorAll('[data-video-page]');
-    for (final el in els) { (el as html.HtmlElement).style.display = 'none'; final v = el.querySelector('video'); if (v is html.VideoElement) v.pause(); }
-  }
-
-  void _showCurrentVideo() {
-    final els = html.document.querySelectorAll('[data-video-page]');
-    for (final el in els) {
-      final idx = (el as html.HtmlElement).dataset['videoPage'];
-      if (idx == '$_current') { el.style.display = 'block'; final v = el.querySelector('video'); if (v is html.VideoElement) v.play().catchError((_) {}); }
-      else { el.style.display = 'none'; final v = el.querySelector('video'); if (v is html.VideoElement) v.pause(); }
-    }
-  }
-
-  @override
-  void dispose() {
-    final els = html.document.querySelectorAll('[data-video-page]');
-    for (final el in els) el.remove();
-    _controller.dispose();
-    super.dispose();
-  }
-
   void _togglePlayPause() {
-    final els = html.document.querySelectorAll('[data-video-page]');
-    for (final el in els) {
-      final idx = (el as html.HtmlElement).dataset['videoPage'];
-      if (idx != '$_current') continue;
-      final v = el.querySelector('video');
-      if (v is html.VideoElement) {
-        if (v.paused) v.play().catchError((_) {});
-        else v.pause();
-        setState(() => _showPlayIcon = true);
-        Future.delayed(const Duration(milliseconds: 500), () { if (mounted) setState(() => _showPlayIcon = false); });
-      }
-    }
+    setState(() { _playing = !_playing; _showPlayIcon = true; });
+    Future.delayed(const Duration(milliseconds: 500), () { if (mounted) setState(() => _showPlayIcon = false); });
   }
 
   Future<void> _doubleTapLike(Map<String, dynamic> v) async {
@@ -107,6 +63,9 @@ class _VideoPageState extends State<VideoPage> {
   }
 
   @override
+  void dispose() { _controller.dispose(); super.dispose(); }
+
+  @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     if (_error != null) return Scaffold(body: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -123,8 +82,6 @@ class _VideoPageState extends State<VideoPage> {
       ElevatedButton(onPressed: () async { await Navigator.pushNamed(context, '/video/upload'); _load(); }, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4D4F), foregroundColor: Colors.white), child: const Text('发布第一条')),
     ])));
 
-    if (widget.isActive) WidgetsBinding.instance.addPostFrameCallback((_) => _showCurrentVideo());
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(children: [
@@ -132,7 +89,7 @@ class _VideoPageState extends State<VideoPage> {
           controller: _controller,
           scrollDirection: Axis.vertical,
           itemCount: _videos.length,
-          onPageChanged: (i) => setState(() => _current = i),
+          onPageChanged: (i) => setState(() { _current = i; _playing = true; }),
           itemBuilder: (ctx, i) => _buildPage(i),
         ),
         SafeArea(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Row(children: [
@@ -153,12 +110,13 @@ class _VideoPageState extends State<VideoPage> {
     final url = v['video_url'] ?? '';
     final pid = v['id'];
     final isLiked = _likedSet[pid] == true;
+    final active = i == _current && widget.isActive;
 
     return GestureDetector(
       onTap: _togglePlayPause,
       onDoubleTap: () => _doubleTapLike(v),
       child: Stack(children: [
-        _VideoInjector(videoId: 'video-$i', url: (i == _current && widget.isActive) ? url : '', pageIndex: i, isCurrent: i == _current && widget.isActive),
+        if (url.isNotEmpty) _VideoInjector(viewTypeId: 'video-${v['id']}', url: url, isCurrent: active, playing: active && _playing),
         if (_showPlayIcon && i == _current)
           const Center(child: Icon(Icons.play_arrow, color: Colors.white70, size: 80)),
         if (_showHeart && i == _current)
@@ -222,11 +180,11 @@ class _VideoPageState extends State<VideoPage> {
 }
 
 class _VideoInjector extends StatefulWidget {
-  final String videoId;
+  final String viewTypeId;
   final String url;
-  final int pageIndex;
   final bool isCurrent;
-  const _VideoInjector({required this.videoId, required this.url, required this.pageIndex, required this.isCurrent});
+  final bool playing;
+  const _VideoInjector({required this.viewTypeId, required this.url, required this.isCurrent, this.playing = true});
   @override
   State<_VideoInjector> createState() => _VideoInjectorState();
 }
@@ -234,48 +192,45 @@ class _VideoInjector extends StatefulWidget {
 class _VideoInjectorState extends State<_VideoInjector> {
   html.VideoElement? _video;
   bool _registered = false;
-  String get _viewId => 'video-view-${widget.pageIndex}';
 
   @override
-  void initState() { super.initState(); _register(); }
-
-  void _register() {
-    if (_registered || widget.url.isEmpty) return;
-    _registered = true;
+  void initState() {
+    super.initState();
     _video = html.VideoElement()
       ..src = widget.url
       ..loop = true
       ..muted = true
       ..controls = false
-      ..autoplay = false
+      ..autoplay = true
       ..style.width = '100%'
       ..style.height = '100%'
       ..style.objectFit = 'cover'
       ..style.backgroundColor = 'black';
-    ui_web.platformViewRegistry.registerViewFactory(_viewId, (_, __) => _video!);
-    if (widget.isCurrent) WidgetsBinding.instance.addPostFrameCallback((_) => _video?.play().catchError((_) {}));
+    _registered = true;
+    ui_web.platformViewRegistry.registerViewFactory(widget.viewTypeId, (int viewId) {
+      return _video!;
+    });
+    if (!widget.isCurrent || !widget.playing) _video!.pause();
   }
 
   @override
   void didUpdateWidget(_VideoInjector old) {
     super.didUpdateWidget(old);
-    if (widget.url != old.url && _video != null) {
-      _video!.src = widget.url;
-      if (widget.isCurrent) _video!.play().catchError((_) {});
-      else _video!.pause();
-    }
-    if (widget.isCurrent != old.isCurrent && _video != null) {
-      if (widget.isCurrent) _video!.play().catchError((_) {});
+    if (_video == null) return;
+    if (widget.url != old.url) { _video!.src = widget.url; }
+    if (widget.playing != old.playing || widget.isCurrent != old.isCurrent) {
+      final shouldPlay = widget.isCurrent && widget.playing;
+      if (shouldPlay) _video!.play().catchError((_) {});
       else _video!.pause();
     }
   }
 
   @override
-  void dispose() { _video?.pause(); super.dispose(); }
+  void dispose() { _video?.pause(); _video = null; super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
     if (!_registered) return Container(color: Colors.black);
-    return HtmlElementView(viewType: _viewId);
+    return HtmlElementView(viewType: widget.viewTypeId);
   }
 }
