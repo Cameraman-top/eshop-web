@@ -15,15 +15,11 @@ class VideoPage extends StatefulWidget {
 }
 
 class _VideoPageState extends State<VideoPage> {
-  final _controller = PageController();
   List<Map<String, dynamic>> _videos = [];
   final Map<int, bool> _likedSet = {};
-  int _current = 0;
   bool _loading = true;
   String? _error;
-  bool _showPlayIcon = false;
-  bool _showHeart = false;
-  bool _playing = true;
+  int? _playingIdx;
 
   @override
   void initState() { super.initState(); _load(); }
@@ -40,41 +36,24 @@ class _VideoPageState extends State<VideoPage> {
     if (mounted) setState(() => _loading = false);
   }
 
-  void _togglePlayPause() {
-    setState(() { _playing = !_playing; _showPlayIcon = true; });
-    Future.delayed(const Duration(milliseconds: 500), () { if (mounted) setState(() => _showPlayIcon = false); });
-  }
-
-  Future<void> _doubleTapLike(Map<String, dynamic> v) async {
-    final pid = v['id'] as int?;
-    if (pid == null) return;
-    if (_likedSet[pid] == true) {
-      setState(() => _showHeart = true);
-      Future.delayed(const Duration(milliseconds: 600), () { if (mounted) setState(() => _showHeart = false); });
-      return;
-    }
-    final user = context.read<UserProvider>();
-    if (!user.isLoggedIn) { Navigator.pushNamed(context, '/login'); return; }
-    setState(() { _likedSet[pid] = true; v['like_count'] = (v['like_count'] ?? 0) + 1; _showHeart = true; });
-    Future.delayed(const Duration(milliseconds: 600), () { if (mounted) setState(() => _showHeart = false); });
-    try {
-      await ApiClient().toggleLike(pid, user.token!, true);
-    } catch (_) { if (mounted) setState(() { _likedSet[pid] = false; v['like_count'] = (v['like_count'] ?? 1) - 1; }); }
-  }
+  void _openPlayer(int idx) => setState(() => _playingIdx = idx);
+  void _closePlayer() => setState(() => _playingIdx = null);
 
   @override
-  void dispose() { _controller.dispose(); super.dispose(); }
+  void dispose() { super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (_error != null) return Scaffold(body: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+    if (_playingIdx != null) return _buildPlayer();
+
+    if (_loading) return Scaffold(appBar: AppBar(title: const Text('短视频')), body: const Center(child: CircularProgressIndicator()));
+    if (_error != null) return Scaffold(appBar: AppBar(title: const Text('短视频')), body: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
       Icon(Icons.error_outline, size: 60, color: Colors.red[300]),
       const SizedBox(height: 12),
-      Text('加载失败', style: TextStyle(color: Colors.red[400], fontSize: 16)),
+      Text('加载失败', style: TextStyle(color: Colors.red[400])),
       TextButton(onPressed: () { setState(() { _loading = true; _error = null; }); _load(); }, child: const Text('重试')),
     ])));
-    if (_videos.isEmpty) return Scaffold(body: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+    if (_videos.isEmpty) return Scaffold(appBar: AppBar(title: const Text('短视频')), body: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
       Icon(Icons.videocam_off_outlined, size: 60, color: Colors.grey[300]),
       const SizedBox(height: 12),
       Text('暂无短视频', style: TextStyle(color: Colors.grey[400], fontSize: 16)),
@@ -83,44 +62,80 @@ class _VideoPageState extends State<VideoPage> {
     ])));
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(children: [
-        PageView.builder(
-          controller: _controller,
-          scrollDirection: Axis.vertical,
+      appBar: AppBar(
+        title: const Text('短视频'),
+        actions: [
+          IconButton(icon: const Icon(Icons.add), onPressed: () async { await Navigator.pushNamed(context, '/video/upload'); _load(); }),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView.builder(
+          padding: const EdgeInsets.all(12),
           itemCount: _videos.length,
-          onPageChanged: (i) => setState(() { _current = i; _playing = true; }),
-          itemBuilder: (ctx, i) => _buildPage(i),
+          itemBuilder: (ctx, i) => _buildCard(i),
         ),
-        SafeArea(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Row(children: [
-          const Text('短视频', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-          const Spacer(),
-          GestureDetector(
-            onTap: () async { await Navigator.pushNamed(context, '/video/upload'); _load(); },
-            child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)), child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.add, color: Colors.white, size: 16), SizedBox(width: 4), Text('发布', style: TextStyle(color: Colors.white, fontSize: 13))])),
-          ),
-        ]))),
-        SafeArea(child: Padding(padding: const EdgeInsets.only(top: 4), child: Row(children: List.generate(_videos.length, (i) => Expanded(child: Container(height: 2, margin: const EdgeInsets.symmetric(horizontal: 1), color: i == _current ? Colors.white : Colors.white24)))))),
-      ]),
+      ),
     );
   }
 
-  Widget _buildPage(int i) {
+  Widget _buildCard(int i) {
+    final v = _videos[i];
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        onTap: () => _openPlayer(i),
+        child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
+          Container(
+            width: 100, height: 140,
+            decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8)),
+            child: const Center(child: Icon(Icons.play_circle_fill, size: 36, color: Colors.white70)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(v['title'] ?? '', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 4),
+            Text(v['content'] ?? '', style: TextStyle(color: Colors.grey[600], fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 8),
+            Row(children: [
+              CircleAvatar(radius: 12, backgroundColor: Colors.grey[200], child: Text((v['nickname'] ?? '?')[0], style: const TextStyle(fontSize: 10))),
+              const SizedBox(width: 6),
+              Text(v['nickname'] ?? '', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+              const Spacer(),
+              Icon(Icons.favorite, size: 14, color: Colors.grey[400]),
+              const SizedBox(width: 2),
+              Text('${v['like_count'] ?? 0}', style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+              const SizedBox(width: 12),
+              Icon(Icons.chat_bubble_outline, size: 14, color: Colors.grey[400]),
+              const SizedBox(width: 2),
+              Text('${v['comment_count'] ?? 0}', style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+            ]),
+          ])),
+        ])),
+      ),
+    );
+  }
+
+  Widget _buildPlayer() {
+    final i = _playingIdx!;
     final v = _videos[i];
     final url = v['video_url'] ?? '';
     final pid = v['id'];
     final isLiked = _likedSet[pid] == true;
-    final active = i == _current && widget.isActive;
 
-    return GestureDetector(
-      onTap: _togglePlayPause,
-      onDoubleTap: () => _doubleTapLike(v),
-      child: Stack(children: [
-        if (url.isNotEmpty) _VideoInjector(viewTypeId: 'video-${v['id']}', url: url, isCurrent: active, playing: active && _playing),
-        if (_showPlayIcon && i == _current)
-          const Center(child: Icon(Icons.play_arrow, color: Colors.white70, size: 80)),
-        if (_showHeart && i == _current)
-          Center(child: IgnorePointer(child: AnimatedScale(scale: _showHeart ? 1.3 : 1.0, duration: const Duration(milliseconds: 300), curve: Curves.elasticOut, child: const Icon(Icons.favorite, color: Colors.redAccent, size: 100)))),
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(children: [
+        if (url.isNotEmpty) _VideoPlayer(viewTypeId: 'video-play-${v['id']}', url: url),
+        SafeArea(child: Row(children: [
+          IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: _closePlayer),
+          const SizedBox(width: 8),
+          Expanded(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(v['title'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+            Text('@${v['nickname'] ?? ''}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          ])),
+          IconButton(icon: const Icon(Icons.more_horiz, color: Colors.white), onPressed: () {}),
+        ])),
         Positioned(bottom: 0, left: 0, right: 0, child: Container(
           padding: const EdgeInsets.fromLTRB(16, 24, 16, 40),
           decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.8), Colors.transparent])),
@@ -137,8 +152,7 @@ class _VideoPageState extends State<VideoPage> {
                   Text(v['nickname'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
                 ]),
               ),
-              if ((v['title'] ?? '').toString().isNotEmpty) ...[const SizedBox(height: 10), Text(v['title'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))],
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Text(v['content'] ?? '', style: const TextStyle(color: Colors.white70, fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
             ])),
             const SizedBox(width: 12),
@@ -179,19 +193,16 @@ class _VideoPageState extends State<VideoPage> {
   }
 }
 
-class _VideoInjector extends StatefulWidget {
+class _VideoPlayer extends StatefulWidget {
   final String viewTypeId;
   final String url;
-  final bool isCurrent;
-  final bool playing;
-  const _VideoInjector({required this.viewTypeId, required this.url, required this.isCurrent, this.playing = true});
+  const _VideoPlayer({required this.viewTypeId, required this.url});
   @override
-  State<_VideoInjector> createState() => _VideoInjectorState();
+  State<_VideoPlayer> createState() => _VideoPlayerState();
 }
 
-class _VideoInjectorState extends State<_VideoInjector> {
+class _VideoPlayerState extends State<_VideoPlayer> {
   html.VideoElement? _video;
-  bool _registered = false;
 
   @override
   void initState() {
@@ -199,38 +210,28 @@ class _VideoInjectorState extends State<_VideoInjector> {
     _video = html.VideoElement()
       ..src = widget.url
       ..loop = true
-      ..muted = true
+      ..muted = false
       ..controls = false
       ..autoplay = true
+      ..style.position = 'absolute'
+      ..style.top = '0'
+      ..style.left = '0'
       ..style.width = '100%'
       ..style.height = '100%'
       ..style.objectFit = 'cover'
       ..style.backgroundColor = 'black';
-    _registered = true;
-    ui_web.platformViewRegistry.registerViewFactory(widget.viewTypeId, (int viewId) {
-      return _video!;
-    });
-    if (!widget.isCurrent || !widget.playing) _video!.pause();
+    ui_web.platformViewRegistry.registerViewFactory(widget.viewTypeId, (int viewId) => _video!);
   }
 
   @override
-  void didUpdateWidget(_VideoInjector old) {
+  void didUpdateWidget(_VideoPlayer old) {
     super.didUpdateWidget(old);
-    if (_video == null) return;
-    if (widget.url != old.url) { _video!.src = widget.url; }
-    if (widget.playing != old.playing || widget.isCurrent != old.isCurrent) {
-      final shouldPlay = widget.isCurrent && widget.playing;
-      if (shouldPlay) _video!.play().catchError((_) {});
-      else _video!.pause();
-    }
+    if (widget.url != old.url && _video != null) { _video!.src = widget.url; _video!.play().catchError((_) {}); }
   }
 
   @override
   void dispose() { _video?.pause(); _video = null; super.dispose(); }
 
   @override
-  Widget build(BuildContext context) {
-    if (!_registered) return Container(color: Colors.black);
-    return HtmlElementView(viewType: widget.viewTypeId);
-  }
+  Widget build(BuildContext context) => HtmlElementView(viewType: widget.viewTypeId);
 }
