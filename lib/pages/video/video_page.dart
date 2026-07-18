@@ -255,7 +255,7 @@ class _VideoInjectorState extends State<_VideoInjector> {
     _video = html.VideoElement()
       ..src = widget.url
       ..loop = true
-      ..muted = false
+      ..muted = true
       ..controls = false
       ..autoplay = widget.isCurrent
       ..style.position = 'absolute'

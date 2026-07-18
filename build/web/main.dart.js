@@ -52067,7 +52067,7 @@ r=s.createElement("video")
 r.toString
 r.src=o.a.d
 r.loop=!0
-r.muted=!1
+r.muted=!0
 r.controls=!1
 r.autoplay=o.a.f
 q=r.style
